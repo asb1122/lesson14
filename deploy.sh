@@ -17,6 +17,10 @@ UNIT_FILE="/home/artsiom/home_works/lesson_14/lesson14/web_server.service"
 SERVICE_NAME="web_server.service"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 
+CHECK_SCRIPT="$(dirname "$0")/check.sh"
+
+export SERVICE_NAME CHECK_URL="http://127.0.0.1:${PORT}/"
+
 git_clone() {
   if [ -d "${APP_DIR}/.git" ]; then
     echo "Updating project from remote repo"
@@ -64,7 +68,21 @@ copy_systemd() {
   systemctl restart "${SERVICE_NAME}"
 }
 
-git_clone
-create_venv
-set_permission
-copy_systemd
+main() {
+  git_clone
+  create_venv
+  set_permission
+  copy_systemd
+
+  chmod +x "${CHECK_SCRIPT}" 2>/dev/null || true
+  sleep 2
+
+  if ! "${CHECK_SCRIPT}"; then
+    echo "Post-install checks failed" >&2
+    exit 1
+  fi
+
+  echo "Done. Service URL: ${APP_URL}"
+}
+
+main "$@"
