@@ -1,0 +1,16 @@
+[Unit]
+Description=Landing14
+After=network.target
+
+[Service]
+Type=simple
+User=webadmin
+Group=webgroup 
+WorkingDirectory=/opt/srv/landing14
+ExecStart=/opt/srv/landing14/venv/bin/python3 /opt/srv/landing14/web_server.py
+Restart=Always
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
