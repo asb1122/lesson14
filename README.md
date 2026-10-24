@@ -2,6 +2,8 @@
 
 1. Написать скрипт для поиска свободного порта из диапазона M-N, где M и N - передаются скрипту как аргументы
 
+запускаем скрипт c аргументами ````./search_port.sh 8000 8020````
+
 ````
 #!/bin/bash
 
@@ -28,14 +30,164 @@ echo "Всего свободно: ${#free_ports[@]}"
 результат
 ````
 artsiom@ubundu26:~/home_works/lesson_14/lesson14$ ./search_port.sh 8000 8100
-Свободные порты в диапазоне 8000-8100:
-8001 8002 8003 8004 8005 8006 8007 8008 8009 8010 8011 8012 8013 8014 8015 8016 8017 8018 8019 8020 8021 8022 8023 8024 8025 8026 8027 8028 8029 8030 8031 8032 8033 8034 8035 8036 8037 8038 8039 8040 8041 8042 8043 8044 8045 8046 8047 8048 8049 8050 8051 8052 8053 8054 8055 8056 8057 8058 8059 8060 8061 8062 8063 8064 8065 8066 8067 8068 8069 8070 8071 8072 8073 8074 8075 8076 8077 8078 8079 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090 8091 8092 8093 8094 8095 8096 8097 8098 8099 8100
+Свободные порты в диапазоне 8000-8020:
+8001 8002 8003 8004 8005 8006 8007 8008 8009 8010 8011 8012 8013 8014 8015 8016 8017 8018 8019 8020
 
-Всего свободно: 99
+Всего свободно: 20
 ````
-
+===========================================================================
 
 2. Написать скрипт, для деплоя лендинга https://gitlab.com/dos-26/cmdb/frontend и скрипт для его проверки
+
+запускаем деплой через ````sudo ./deploy.sh````
+
+````
+#!/bin/bash
+set -euo pipefail
+
+APP_NAME="landing14"
+PORT="8000"
+APP_URL="http://127.0.0.1:${PORT}"
+
+APP_USER="webadmin"
+APP_GROUP="webgroup"
+OWNER="${APP_USER}:${APP_GROUP}"
+REPO_URL="https://gitlab.com/dos-26/cmdb/frontend.git"
+
+APP_DIR="/opt/srv/${APP_NAME}"
+VENV_DIR="${APP_DIR}/venv"
+UNIT_FILE="/home/artsiom/home_works/lesson_14/lesson14/web_server.service"
+
+SERVICE_NAME="web_server.service"
+SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+
+git_clone() {
+  if [ -d "${APP_DIR}/.git" ]; then
+    echo "Updating project from remote repo"
+    git -C "${APP_DIR}" fetch origin
+    git -C "${APP_DIR}" reset --hard origin/main
+  else
+    echo "GIT CLONE ${REPO_URL}"
+    git clone "${REPO_URL}" "${APP_DIR}"
+  fi
+}
+
+create_venv() {
+  if [ ! -x "${VENV_DIR}/bin/python3" ]; then
+    echo "Creating venv in ${VENV_DIR}"
+    sudo python3 -m venv "${VENV_DIR}"
+  else
+    echo "venv already exists: ${VENV_DIR}"
+  fi
+}
+
+set_permission() {
+  chown -R "${OWNER}" "${APP_DIR}"
+  find "${APP_DIR}/public" -type d -exec chmod 755 {} \;
+  find "${APP_DIR}/public" -type f -exec chmod 644 {} \;
+}
+
+copy_systemd() {
+  if [ -f "${SERVICE_PATH}" ]; then
+    if cmp -s "${UNIT_FILE}" "${SERVICE_PATH}"; then
+      echo "systemd unit already up-to-date: ${SERVICE_PATH}"
+    else
+      echo "systemd unit exists but differs. backing up and updating"
+      cp "${SERVICE_PATH}" "${SERVICE_PATH}.bak.$(date +%Y%m%d%H%M%S)"
+      cp "${UNIT_FILE}" "${SERVICE_PATH}"
+      chmod 644 "${SERVICE_PATH}"
+    fi
+  else
+    echo "Installing systemd unit ${SERVICE_PATH}"
+    cp "${UNIT_FILE}" "${SERVICE_PATH}"
+    chmod 644 "${SERVICE_PATH}"
+  fi
+
+  systemctl daemon-reload
+  systemctl enable "${SERVICE_NAME}"
+  systemctl restart "${SERVICE_NAME}"
+}
+
+git_clone
+create_venv
+set_permission
+copy_systemd
+
+````
+
+результат:
+````
+artsiom@ubundu26:/etc/systemd/system$ ll -la /opt/srv/landing14/
+total 24
+drwxr-xr-x 4 webadmin webgroup 4096 Oct 24 12:35 ./
+drwxr-xr-x 4 root     root     4096 Oct 24 02:22 ../
+drwxr-xr-x 7 webadmin webgroup 4096 Oct 24 13:13 .git/
+-rw-r--r-- 1 webadmin webgroup  896 Oct 24 12:35 .gitlab-ci.yml
+drwxr-xr-x 2 webadmin webgroup 4096 Oct 24 12:35 public/
+-rwxr-xr-x 1 webadmin webgroup  198 Oct 24 03:00 web_server.py*
+artsiom@ubundu26:/etc/systemd/system$ ll -la /opt/srv/landing14/public/
+total 20
+drwxr-xr-x 2 webadmin webgroup 4096 Oct 24 12:35 ./
+drwxr-xr-x 4 webadmin webgroup 4096 Oct 24 12:35 ../
+-rw-r--r-- 1 webadmin webgroup 1241 Oct 24 12:35 index.html
+-rw-r--r-- 1 webadmin webgroup 1298 Oct 24 12:35 script.js
+-rw-r--r-- 1 webadmin webgroup  599 Oct 24 12:35 style.css
+artsiom@ubundu26:/etc/systemd/system$ sudo systemctl status web_server.service
+● web_server.service - Landing14
+     Loaded: loaded (/etc/systemd/system/web_server.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-10-24 13:20:54 +03; 10s ago
+ Invocation: 81c0f7a73934473690fc8e08d1648c36
+   Main PID: 421157 (python3)
+      Tasks: 1 (limit: 2338)
+     Memory: 9.3M (peak: 9.4M)
+        CPU: 28ms
+     CGroup: /system.slice/web_server.service
+             └─421157 /opt/srv/landing14/venv/bin/python3 /opt/srv/landing14/web_server.py
+
+Oct 24 13:20:54 ubundu26 systemd[1]: Started web_server.service - Landing14.
+artsiom@ubundu26:/etc/systemd/system$ curl http://localhost:8000
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CMDB System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Configuration Management Database</h1>
+
+        <div class="form-section">
+            <h2>Add New Asset</h2>
+            <input type="text" id="name" placeholder="Asset Name">
+            <select id="type">
+                <option value="server">Server</option>
+                <option value="network">Network Device</option>
+                <option value="storage">Storage</option>
+            </select>
+            <textarea id="description" placeholder="Description"></textarea>
+            <button onclick="addAsset()">Add Asset</button>
+        </div>
+
+        <div class="assets-list">
+            <h2>Assets</h2>
+            <table id="assetsTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    <script src="script.js"></script>
+
+````
+===========================================================================
 
 
 3. Развернуть Python-веб-сервер как systemd демон
