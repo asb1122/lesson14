@@ -39,6 +39,9 @@ artsiom@ubundu26:~/home_works/lesson_14/lesson14$ ./search_port.sh 8000 8100
 
 2. Написать скрипт, для деплоя лендинга https://gitlab.com/dos-26/cmdb/frontend и скрипт для его проверки
 
+выполнить
+````chmod +x deploy.sh check.sh```` 
+
 запускаем деплой через ````sudo ./deploy.sh````
 
 ````
@@ -60,6 +63,10 @@ UNIT_FILE="/home/artsiom/home_works/lesson_14/lesson14/web_server.service"
 
 SERVICE_NAME="web_server.service"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+
+CHECK_SCRIPT="$(dirname "$0")/check.sh"
+
+export SERVICE_NAME CHECK_URL="http://127.0.0.1:${PORT}/"
 
 git_clone() {
   if [ -d "${APP_DIR}/.git" ]; then
@@ -108,14 +115,118 @@ copy_systemd() {
   systemctl restart "${SERVICE_NAME}"
 }
 
-git_clone
-create_venv
-set_permission
-copy_systemd
+main() {
+  git_clone
+  create_venv
+  set_permission
+  copy_systemd
+
+  chmod +x "${CHECK_SCRIPT}" 2>/dev/null || true
+  sleep 2
+
+  if ! "${CHECK_SCRIPT}"; then
+    echo "Post-install checks failed" >&2
+    exit 1
+  fi
+
+  echo "Done. Service URL: ${APP_URL}"
+}
+
+main "$@"
 
 ````
 
-результат:
+проверка состояния ````sudo ./check.sh```` 
+можно запустить как одельный скрипт так и запускаетса в рамках ````./deploy.sh````
+````
+artsiom@ubundu26:~/home_works/lesson_14/lesson14$ cat check.sh 
+#!/bin/bash
+# Проверка сервиса: systemd-статус + HTTP-ответ.
+# Возвращает 0, если обе проверки прошли, иначе 1.
+
+SERVICE_NAME="${SERVICE_NAME:-web_server.service}"
+CHECK_URL="${CHECK_URL:-http://127.0.0.1:8000/}"
+
+fail=0
+
+state="$(systemctl is-active "${SERVICE_NAME}" 2>/dev/null || true)"
+if [ "${state}" = "active" ]; then
+  echo "OK: ${SERVICE_NAME} is active"
+else
+  echo "FAIL: ${SERVICE_NAME} state is '${state}'"
+  fail=1
+fi
+
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${CHECK_URL}" 2>/dev/null || true)"
+if [ "${code}" -ge 200 ] 2>/dev/null && [ "${code}" -lt 400 ]; then
+  echo "OK: HTTP ${code} from ${CHECK_URL}"
+else
+  echo "FAIL: HTTP ${code:-no-response} from ${CHECK_URL}"
+  fail=1
+fi
+
+if [ "${fail}" -ne 0 ]; then
+  echo "--- last 20 lines of ${SERVICE_NAME} ---"
+  sudo journalctl -u "${SERVICE_NAME}" -b --no-pager | tail -n 20
+fi
+
+exit "${fail}"
+
+````
+
+
+реузльтаты выполняения скриптов - деплой и чек
+````
+artsiom@ubundu26:~/home_works/lesson_14/lesson14$ sudo ./deploy.sh
+Updating project from remote repo
+HEAD is now at 86a0743 sd
+venv already exists: /opt/srv/landing14/venv
+systemd unit already up-to-date: /etc/systemd/system/web_server.service
+OK: web_server.service is active
+OK: HTTP 200 from http://127.0.0.1:8000/
+Done. Service URL: http://127.0.0.1:8000
+````
+
+только чек
+- success
+````
+artsiom@ubundu26:~/home_works/lesson_14/lesson14$ sudo ./check.sh 
+OK: web_server.service is active
+OK: HTTP 200 from http://127.0.0.1:8000/
+````
+- fail
+````
+artsiom@ubundu26:~/home_works/lesson_14/lesson14$ sudo ./check.sh 
+FAIL: web_server.service state is 'inactive'
+FAIL: HTTP 000 from http://127.0.0.1:8000/
+--- last 20 lines of web_server.service ---
+Oct 24 14:14:57 ubundu26 python3[421658]: 127.0.0.1 - - [24/Oct/2026 14:14:57] "GET / HTTP/1.1" 200 -
+Oct 24 14:33:51 ubundu26 python3[421658]: 127.0.0.1 - - [24/Oct/2026 14:33:51] "GET / HTTP/1.1" 200 -
+Oct 24 14:34:11 ubundu26 systemd[1]: /etc/systemd/system/web_server.service:11: Failed to parse Restart=Always, ignoring: Invalid argument
+Oct 24 14:34:11 ubundu26 systemd[1]: /etc/systemd/system/web_server.service:11: Failed to parse Restart=Always, ignoring: Invalid argument
+Oct 24 14:34:11 ubundu26 systemd[1]: Stopping web_server.service - Landing14...
+Oct 24 14:34:11 ubundu26 systemd[1]: web_server.service: Deactivated successfully.
+Oct 24 14:34:11 ubundu26 systemd[1]: Stopped web_server.service - Landing14.
+Oct 24 14:34:11 ubundu26 systemd[1]: Started web_server.service - Landing14.
+Oct 24 14:34:13 ubundu26 python3[422139]: 127.0.0.1 - - [24/Oct/2026 14:34:13] "GET / HTTP/1.1" 200 -
+Oct 24 14:43:08 ubundu26 python3[422139]: 127.0.0.1 - - [24/Oct/2026 14:43:08] "GET / HTTP/1.1" 200 -
+Oct 24 14:44:41 ubundu26 systemd[1]: /etc/systemd/system/web_server.service:11: Failed to parse Restart=Always, ignoring: Invalid argument
+Oct 24 14:44:41 ubundu26 systemd[1]: /etc/systemd/system/web_server.service:11: Failed to parse Restart=Always, ignoring: Invalid argument
+Oct 24 14:44:41 ubundu26 systemd[1]: Stopping web_server.service - Landing14...
+Oct 24 14:44:41 ubundu26 systemd[1]: web_server.service: Deactivated successfully.
+Oct 24 14:44:41 ubundu26 systemd[1]: Stopped web_server.service - Landing14.
+Oct 24 14:44:41 ubundu26 systemd[1]: Started web_server.service - Landing14.
+Oct 24 14:44:43 ubundu26 python3[422426]: 127.0.0.1 - - [24/Oct/2026 14:44:43] "GET / HTTP/1.1" 200 -
+Oct 24 14:45:33 ubundu26 systemd[1]: Stopping web_server.service - Landing14...
+Oct 24 14:45:33 ubundu26 systemd[1]: web_server.service: Deactivated successfully.
+Oct 24 14:45:33 ubundu26 systemd[1]: Stopped web_server.service - Landing14.
+
+````
+
+
+
+
+ползователи в репо и статус сервиса
 ````
 artsiom@ubundu26:/etc/systemd/system$ ll -la /opt/srv/landing14/
 total 24
@@ -132,6 +243,8 @@ drwxr-xr-x 4 webadmin webgroup 4096 Oct 24 12:35 ../
 -rw-r--r-- 1 webadmin webgroup 1241 Oct 24 12:35 index.html
 -rw-r--r-- 1 webadmin webgroup 1298 Oct 24 12:35 script.js
 -rw-r--r-- 1 webadmin webgroup  599 Oct 24 12:35 style.css
+
+
 artsiom@ubundu26:/etc/systemd/system$ sudo systemctl status web_server.service
 ● web_server.service - Landing14
      Loaded: loaded (/etc/systemd/system/web_server.service; enabled; preset: enabled)
@@ -145,6 +258,10 @@ artsiom@ubundu26:/etc/systemd/system$ sudo systemctl status web_server.service
              └─421157 /opt/srv/landing14/venv/bin/python3 /opt/srv/landing14/web_server.py
 
 Oct 24 13:20:54 ubundu26 systemd[1]: Started web_server.service - Landing14.
+
+
+
+
 artsiom@ubundu26:/etc/systemd/system$ curl http://localhost:8000
 <!DOCTYPE html>
 <html>
