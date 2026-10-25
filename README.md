@@ -236,7 +236,7 @@ drwxr-xr-x 4 root     root     4096 Oct 24 02:22 ../
 drwxr-xr-x 7 webadmin webgroup 4096 Oct 24 13:13 .git/
 -rw-r--r-- 1 webadmin webgroup  896 Oct 24 12:35 .gitlab-ci.yml
 drwxr-xr-x 2 webadmin webgroup 4096 Oct 24 12:35 public/
--rwxr-xr-x 1 webadmin webgroup  198 Oct 24 03:00 web_server.py*
+-rwxr-xr-- 1 webadmin webgroup  198 Oct 24 03:00 web_server.py
 artsiom@ubundu26:/etc/systemd/system$ ll -la /opt/srv/landing14/public/
 total 20
 drwxr-xr-x 2 webadmin webgroup 4096 Oct 24 12:35 ./
